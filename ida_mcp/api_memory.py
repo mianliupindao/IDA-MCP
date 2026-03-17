@@ -2,7 +2,7 @@
 
 提供工具:
     - get_bytes          读取原始字节
-    - get_u8/u16/u32/u64 读取整数
+    - read_scalar        读取标量整数
     - get_string         读取字符串
 """
 from __future__ import annotations
@@ -75,47 +75,25 @@ def get_bytes(
 
 
 # ============================================================================
-# 整数读取
+# 标量读取
 # ============================================================================
 
 @tool
 @idaread
-def get_u8(
+def read_scalar(
     addr: Annotated[Union[int, str], "Address(es) - single or comma-separated"],
+    width: Annotated[int, "Scalar width in bytes: 1, 2, 4, or 8"] = 4,
+    signed: Annotated[bool, "Whether to decode as signed integer"] = False,
 ) -> List[dict]:
-    """Read 8-bit unsigned integer(s)."""
-    return _read_int(addr, 1, signed=False)
+    """Read scalar integer(s) with explicit width."""
+    return _read_scalar(addr, width, signed=signed)
 
 
-@tool
-@idaread
-def get_u16(
-    addr: Annotated[Union[int, str], "Address(es) - single or comma-separated"],
-) -> List[dict]:
-    """Read 16-bit unsigned integer(s)."""
-    return _read_int(addr, 2, signed=False)
+def _read_scalar(addr: Union[int, str], width: int, signed: bool = False) -> List[dict]:
+    """内部: 读取标量整数。"""
+    if width not in (1, 2, 4, 8):
+        return [{"error": "width must be one of 1, 2, 4, or 8", "width": width}]
 
-
-@tool
-@idaread
-def get_u32(
-    addr: Annotated[Union[int, str], "Address(es) - single or comma-separated"],
-) -> List[dict]:
-    """Read 32-bit unsigned integer(s)."""
-    return _read_int(addr, 4, signed=False)
-
-
-@tool
-@idaread
-def get_u64(
-    addr: Annotated[Union[int, str], "Address(es) - single or comma-separated"],
-) -> List[dict]:
-    """Read 64-bit unsigned integer(s)."""
-    return _read_int(addr, 8, signed=False)
-
-
-def _read_int(addr: Union[int, str], size: int, signed: bool = False) -> List[dict]:
-    """内部: 读取整数。"""
     queries = normalize_list_input(addr)
     results = []
     
@@ -127,7 +105,7 @@ def _read_int(addr: Union[int, str], size: int, signed: bool = False) -> List[di
         
         address = parsed["value"]
         try:
-            data = idaapi.get_bytes(address, size)
+            data = idaapi.get_bytes(address, width)
             if data is None:
                 results.append({"error": "failed to read", "query": query, "address": hex_addr(address)})
                 continue
@@ -139,13 +117,17 @@ def _read_int(addr: Union[int, str], size: int, signed: bool = False) -> List[di
                     endian = 'big'
             except Exception:
                 pass
+            unsigned_value = int.from_bytes(data, byteorder=endian, signed=False)
             value = int.from_bytes(data, byteorder=endian, signed=signed)
             
             results.append({
                 "query": query,
                 "address": hex_addr(address),
+                "width": width,
+                "signed": bool(signed),
                 "value": value,
-                "hex": f"0x{value:0{size*2}X}",
+                "unsigned": unsigned_value,
+                "hex": f"0x{unsigned_value:0{width*2}X}",
             })
         except Exception as e:
             results.append({"error": str(e), "query": query, "address": hex_addr(address)})

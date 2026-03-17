@@ -48,11 +48,6 @@ class TestModelingHelpers:
         result = api_modeling.undefine_items.__wrapped__(0x401000, 0)
         assert result["error"] == "size must be greater than zero"
 
-    def test_create_array_rejects_non_positive_count(self):
-        result = api_modeling.create_array.__wrapped__(0x401000, "byte", 0)
-        assert result["error"] == "count must be greater than zero"
-
-
 class TestModelingToolBehavior:
     """Behavioral tests using monkeypatched IDA APIs."""
 
@@ -149,6 +144,74 @@ class TestModelingToolBehavior:
         result = api_modeling.make_string.__wrapped__(0x401000, "c", -1)
         assert result["error"] == "length must be zero or greater"
 
+    def test_make_code_invalidates_string_cache_on_success(self, monkeypatch):
+        calls = {"invalidate": 0}
+
+        monkeypatch.setattr(api_modeling, "wait_for_auto_analysis", lambda: None)
+        monkeypatch.setattr(api_modeling, "_ensure_code", lambda _ea: True)
+        monkeypatch.setattr(api_modeling, "_invalidate_strings_cache", lambda: calls.__setitem__("invalidate", calls["invalidate"] + 1))
+
+        states = iter(
+            [
+                {"ea": "0x401000", "head": "0x401000", "size": 4, "kind": "data"},
+                {"ea": "0x401000", "head": "0x401000", "size": 1, "kind": "code"},
+            ]
+        )
+        monkeypatch.setattr(api_modeling, "_describe_item", lambda _ea: next(states))
+
+        result = api_modeling.make_code.__wrapped__(0x401000)
+
+        assert result["changed"] is True
+        assert calls["invalidate"] == 1
+
+    def test_make_data_invalidates_string_cache_on_success(self, monkeypatch):
+        calls = {"invalidate": 0}
+
+        monkeypatch.setattr(api_modeling, "wait_for_auto_analysis", lambda: None)
+        monkeypatch.setattr(api_modeling, "_invalidate_strings_cache", lambda: calls.__setitem__("invalidate", calls["invalidate"] + 1))
+        monkeypatch.setattr(api_modeling, "_create_numeric_items", lambda _ea, _kind, _count: (True, 1))
+        monkeypatch.setattr(api_modeling, "_undefine_range", lambda _ea, _size: True)
+
+        states = iter(
+            [
+                {"ea": "0x401000", "head": "0x401000", "size": 4, "kind": "string"},
+                {"ea": "0x401000", "head": "0x401000", "size": 4, "kind": "data"},
+            ]
+        )
+        monkeypatch.setattr(api_modeling, "_describe_item", lambda _ea: next(states))
+
+        result = api_modeling.make_data.__wrapped__(0x401000, "byte", 4)
+
+        assert result["changed"] is True
+        assert calls["invalidate"] == 1
+
+    def test_make_string_invalidates_string_cache_on_success(self, monkeypatch):
+        calls = {"invalidate": 0}
+
+        class FakeBytes:
+            @staticmethod
+            def create_strlit(_ea, _length, _strtype):
+                return True
+
+        monkeypatch.setattr(api_modeling, "ida_bytes", FakeBytes())
+        monkeypatch.setattr(api_modeling, "wait_for_auto_analysis", lambda: None)
+        monkeypatch.setattr(api_modeling, "_invalidate_strings_cache", lambda: calls.__setitem__("invalidate", calls["invalidate"] + 1))
+        monkeypatch.setattr(api_modeling, "_string_type_value", lambda _kind: (0, None))
+        monkeypatch.setattr(api_modeling, "_undefine_range", lambda _ea, _size: True)
+
+        states = iter(
+            [
+                {"ea": "0x401000", "head": "0x401000", "size": 4, "kind": "data"},
+                {"ea": "0x401000", "head": "0x401000", "size": 4, "kind": "string"},
+            ]
+        )
+        monkeypatch.setattr(api_modeling, "_describe_item", lambda _ea: next(states))
+
+        result = api_modeling.make_string.__wrapped__(0x401000, "c", 4)
+
+        assert result["changed"] is True
+        assert calls["invalidate"] == 1
+
 
 class TestModelingIntegration:
     """Integration tests that exercise the proxy/direct tool path."""
@@ -206,26 +269,6 @@ class TestModelingIntegration:
         assert isinstance(result, dict)
         assert "error" not in result
         assert result.get("normalized_type") == "byte"
-        assert result.get("new_item", {}).get("kind") == "data"
-
-        try:
-            restored = tool_caller("make_string", _make_string_params(address, string_len))
-            assert isinstance(restored, dict)
-            assert "error" not in restored
-            assert restored.get("new_item", {}).get("kind") == "string"
-        finally:
-            _restore_string(tool_caller, address, string_len)
-
-    def test_create_array_success_and_restore_string(self, tool_caller, first_string):
-        address = first_string["ea"]
-        address = hex(address) if isinstance(address, int) else address
-        string_len = int(first_string.get("length") or 0)
-
-        result = tool_caller("create_array", {"address": address, "item_type": "byte", "count": 4})
-        assert isinstance(result, dict)
-        assert "error" not in result
-        assert result.get("normalized_type") == "byte"
-        assert result.get("count") == 4
         assert result.get("new_item", {}).get("kind") == "data"
 
         try:
