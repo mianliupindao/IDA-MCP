@@ -3,7 +3,7 @@
 提供工具:
     - decompile           反编译函数 (Hex-Rays)
     - disasm              反汇编函数
-    - linear_disassemble  线性反汇编
+    - linear_disasm       线性反汇编
     - xrefs_to            交叉引用 (到)
     - xrefs_from          交叉引用 (从)
     - xrefs_to_field      结构体字段引用
@@ -255,7 +255,7 @@ def _disasm_single(query: str) -> dict:
 
 @tool
 @idaread
-def linear_disassemble(
+def linear_disasm(
     start_address: Annotated[Union[int, str], "Starting address"],
     count: Annotated[int, "Max number of instructions (1..64)"] = 16,
 ) -> dict:

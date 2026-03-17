@@ -10,7 +10,7 @@ except ImportError:  # pragma: no cover
 
 from ..config import is_unsafe_enabled
 from ._state import forward
-from . import api_lifecycle
+from . import lifecycle
 
 
 def register_tools(server: Any) -> None:
@@ -134,14 +134,14 @@ def register_tools(server: Any) -> None:
         return forward("disasm", {"addr": addr}, port, timeout=timeout)
 
     @server.tool(description="Linear disassembly from address. Returns raw instructions.")
-    def linear_disassemble(
+    def linear_disasm(
         start_address: Annotated[str, Field(description="Start address")],
         count: Annotated[int, Field(description="Number of instructions")] = 20,
         port: Annotated[Optional[int], Field(description="Instance port override")] = None,
         timeout: Annotated[Optional[int], Field(description="Timeout in seconds")] = None,
     ) -> Any:
         return forward(
-            "linear_disassemble",
+            "linear_disasm",
             {"start_address": start_address, "count": count},
             port,
             timeout=timeout,
@@ -266,6 +266,86 @@ def register_tools(server: Any) -> None:
         timeout: Annotated[Optional[int], Field(description="Timeout in seconds")] = None,
     ) -> Any:
         return forward("patch_bytes", {"items": items}, port, timeout=timeout)
+
+    @server.tool(description="Create a function at an address.")
+    def create_function(
+        address: Annotated[str, Field(description="Function start address (hex or decimal)")],
+        end: Annotated[Optional[str], Field(description="Optional function end address (exclusive)")] = None,
+        port: Annotated[Optional[int], Field(description="Instance port override")] = None,
+        timeout: Annotated[Optional[int], Field(description="Timeout in seconds")] = None,
+    ) -> Any:
+        params: Dict[str, Any] = {"address": address}
+        if end is not None:
+            params["end"] = end
+        return forward("create_function", params, port, timeout=timeout)
+
+    @server.tool(description="Delete an existing function.")
+    def delete_function(
+        address: Annotated[str, Field(description="Function start or internal address (hex or decimal)")],
+        port: Annotated[Optional[int], Field(description="Instance port override")] = None,
+        timeout: Annotated[Optional[int], Field(description="Timeout in seconds")] = None,
+    ) -> Any:
+        return forward("delete_function", {"address": address}, port, timeout=timeout)
+
+    @server.tool(description="Convert bytes at an address into code.")
+    def make_code(
+        address: Annotated[str, Field(description="Address to convert into code")],
+        port: Annotated[Optional[int], Field(description="Instance port override")] = None,
+        timeout: Annotated[Optional[int], Field(description="Timeout in seconds")] = None,
+    ) -> Any:
+        return forward("make_code", {"address": address}, port, timeout=timeout)
+
+    @server.tool(description="Undefine items in a range.")
+    def undefine_items(
+        address: Annotated[str, Field(description="Start address of the range to undefine")],
+        size: Annotated[int, Field(description="Number of bytes to undefine")],
+        port: Annotated[Optional[int], Field(description="Instance port override")] = None,
+        timeout: Annotated[Optional[int], Field(description="Timeout in seconds")] = None,
+    ) -> Any:
+        return forward("undefine_items", {"address": address, "size": size}, port, timeout=timeout)
+
+    @server.tool(description="Create typed data items at an address.")
+    def make_data(
+        address: Annotated[str, Field(description="Address to convert into typed data")],
+        data_type: Annotated[str, Field(description="Data type: byte, word, dword, qword, oword, float, double, pointer")],
+        count: Annotated[int, Field(description="Number of items to create")] = 1,
+        port: Annotated[Optional[int], Field(description="Instance port override")] = None,
+        timeout: Annotated[Optional[int], Field(description="Timeout in seconds")] = None,
+    ) -> Any:
+        return forward(
+            "make_data",
+            {"address": address, "data_type": data_type, "count": count},
+            port,
+            timeout=timeout,
+        )
+
+    @server.tool(description="Create a string literal at an address.")
+    def make_string(
+        address: Annotated[str, Field(description="Address to convert into a string literal")],
+        string_type: Annotated[str, Field(description="String type: c, c16, c32, pascal, len2, len4, ...")] = "c",
+        length: Annotated[Optional[int], Field(description="Optional length override (0 or omitted lets IDA infer)")] = None,
+        port: Annotated[Optional[int], Field(description="Instance port override")] = None,
+        timeout: Annotated[Optional[int], Field(description="Timeout in seconds")] = None,
+    ) -> Any:
+        params: Dict[str, Any] = {"address": address, "string_type": string_type}
+        if length is not None:
+            params["length"] = length
+        return forward("make_string", params, port, timeout=timeout)
+
+    @server.tool(description="Create an array of typed data items.")
+    def create_array(
+        address: Annotated[str, Field(description="Address to convert into an array")],
+        item_type: Annotated[str, Field(description="Array item type: byte, word, dword, qword, oword, float, double, pointer")],
+        count: Annotated[int, Field(description="Number of array elements")],
+        port: Annotated[Optional[int], Field(description="Instance port override")] = None,
+        timeout: Annotated[Optional[int], Field(description="Timeout in seconds")] = None,
+    ) -> Any:
+        return forward(
+            "create_array",
+            {"address": address, "item_type": item_type, "count": count},
+            port,
+            timeout=timeout,
+        )
 
     @server.tool(description="Read memory bytes. Returns hex dump and byte array.")
     def get_bytes(
@@ -533,7 +613,7 @@ def register_tools(server: Any) -> None:
         file_path: Annotated[str, Field(description="Path to the file to open (executable or IDB)")],
         extra_args: Annotated[Optional[List[str]], Field(description="Extra arguments to pass to IDA")] = None,
     ) -> dict:
-        return api_lifecycle.open_in_ida(file_path, extra_args=extra_args)
+        return lifecycle.open_in_ida(file_path, extra_args=extra_args)
 
     @server.tool(description="Close the target IDA instance. Warning: This terminates the process.")
     def close_ida(
@@ -541,11 +621,11 @@ def register_tools(server: Any) -> None:
         port: Annotated[Optional[int], Field(description="Instance port override")] = None,
         timeout: Annotated[Optional[int], Field(description="Timeout in seconds")] = None,
     ) -> dict:
-        return api_lifecycle.close_ida(save=save, port=port, timeout=timeout)
+        return lifecycle.close_ida(save=save, port=port, timeout=timeout)
 
     @server.tool(description="Request shutdown of the standalone gateway. Refuses while instances are registered unless force=true.")
     def shutdown_gateway(
         force: Annotated[bool, Field(description="Allow shutdown even if instances are still registered")] = False,
         timeout: Annotated[Optional[int], Field(description="Timeout in seconds")] = None,
     ) -> dict:
-        return api_lifecycle.shutdown_gateway(force=force, timeout=timeout)
+        return lifecycle.shutdown_gateway(force=force, timeout=timeout)

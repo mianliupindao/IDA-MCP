@@ -32,6 +32,7 @@
 * `api_core.py` - IDB 元数据、函数/字符串/全局变量列表
 * `api_analysis.py` - 反编译、反汇编、交叉引用
 * `api_memory.py` - 内存读取操作
+* `api_modeling.py` - 数据库塑形（函数、code/data/string 创建）
 * `api_types.py` - 类型操作（原型、本地类型）
 * `api_modify.py` - 注释、重命名
 * `api_stack.py` - 栈帧操作
@@ -74,7 +75,7 @@
 
 * `decompile` – 批量反编译函数（Hex-Rays）
 * `disasm` – 批量反汇编函数
-* `linear_disassemble` – 从任意地址线性反汇编
+* `linear_disasm` – 从任意地址线性反汇编
 * `xrefs_to` – 批量获取到地址的交叉引用
 * `xrefs_from` – 批量获取从地址的交叉引用
 * `xrefs_to_field` – 启发式结构体字段引用
@@ -86,6 +87,16 @@
 * `get_bytes` – 读取原始字节
 * `get_u8` / `get_u16` / `get_u32` / `get_u64` – 读取整数
 * `get_string` – 读取空终止字符串
+
+### 建模工具 (`api_modeling.py`)
+
+* `create_function` – 在地址处创建函数
+* `delete_function` – 删除已有函数
+* `make_code` – 把地址处字节转换为代码
+* `undefine_items` – 取消定义一段字节范围
+* `make_data` – 创建带类型的数据项
+* `make_string` – 创建字符串字面量
+* `create_array` – 创建带类型的数据数组
 
 ### 类型工具 (`api_types.py`)
 
@@ -162,24 +173,26 @@ IDA-MCP/
     api_core.py           # 核心 API（元数据、列表）
     api_analysis.py       # 分析 API（反编译、反汇编、交叉引用）
     api_memory.py         # 内存 API
+    api_modeling.py       # 建模 API（函数、code/data/string 创建）
     api_types.py          # 类型 API
     api_modify.py         # 修改 API
     api_stack.py          # 栈帧 API
     api_debug.py          # 调试器 API（不安全）
     api_python.py         # Python 执行 API（不安全）
-    api_lifecycle.py      # 生命周期 API（关闭/退出）
+    api_lifecycle.py      # IDA 实例内生命周期 API（关闭/退出）
     api_resources.py      # MCP 资源
     registry.py           # 网关客户端辅助逻辑 / 多实例注册
     proxy/                # 基于 stdio 的 MCP 代理
       __init__.py         # 代理模块导出
       ida_mcp_proxy.py    # 主入口（stdio MCP 服务端）
-      api_lifecycle.py    # proxy 侧生命周期 API 实现
+      lifecycle.py        # proxy 侧生命周期操作
       _http.py            # 与网关通信的 HTTP 辅助函数
       _state.py           # 状态管理和端口验证
       _server.py          # FastMCP 服务端实例和工具注册
       register_tools.py   # 集中注册所有转发工具
       http_server.py      # HTTP 传输包装器（复用 ida_mcp_proxy.server）
   mcp.json                # MCP 客户端配置（两种模式）
+  roadmap.md              # 逐阶段降低 py_eval 依赖的路线图
   README.md               # 英文 README
   README_CN.md            # 中文 README
   requirements.txt        # fastmcp 依赖
@@ -199,7 +212,7 @@ IDA-MCP/
 
 关闭某个 IDA 实例只会注销该实例；独立网关会继续运行，后续新实例仍可继续接入。
 
-`open_in_ida` 是 proxy 侧的生命周期工具。它会使用 `IDA_PATH` 或 `config.conf` 中的 `ida_path` 解析 IDA 可执行文件，带上 `IDA_MCP_AUTO_START=1` 启动，并在未显式指定时默认注入 `-A`，用于尽量减少启动交互，但不保证所有 IDA / loader / plugin 弹窗都被压掉。
+`open_in_ida` 是 proxy 侧的生命周期工具。它会使用 `IDA_PATH` 或 `config.conf` 中的 `ida_path` 解析 IDA 可执行文件，并带上 `IDA_MCP_AUTO_START=1` 让插件自动启动。默认保持 IDA 的正常交互式 GUI 模式；如果你确实需要 batch/autonomous 模式，再通过 `extra_args` 显式传入 `-A`。
 
 IDA-MCP 支持 WSL 兼容运行。在 WSL 环境下，`open_in_ida` 可以从 Linux 侧工具链直接启动 Windows 版 IDA，并会在启动前自动把目标文件路径转换成 Windows 路径。
 
@@ -232,7 +245,8 @@ proxy 通过 HTTP 和 stdio 暴露同一套转发工具：
 | 管理 | `check_connection`, `list_instances`, `select_instance` |
 | 生命周期 | `open_in_ida`, `close_ida` |
 | 核心 | `list_functions`, `get_metadata`, `list_strings`, `list_globals`, `list_local_types`, `get_entry_points`, `get_function`, `list_imports`, `list_exports`, `list_segments`, `get_cursor` |
-| 分析 | `decompile`, `disasm`, `linear_disassemble`, `xrefs_to`, `xrefs_from`, `xrefs_to_field`, `find_bytes`, `get_basic_blocks` |
+| 分析 | `decompile`, `disasm`, `linear_disasm`, `xrefs_to`, `xrefs_from`, `xrefs_to_field`, `find_bytes`, `get_basic_blocks` |
+| 建模 | `create_function`, `delete_function`, `make_code`, `undefine_items`, `make_data`, `make_string`, `create_array` |
 | 修改 | `set_comment`, `rename_function`, `rename_global_variable`, `rename_local_variable`, `patch_bytes` |
 | 内存 | `get_bytes`, `get_u8`, `get_u16`, `get_u32`, `get_u64`, `get_string` |
 | 类型 | `set_function_prototype`, `set_local_variable_type`, `set_global_variable_type`, `declare_type`, `list_structs`, `get_struct_info` |

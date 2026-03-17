@@ -16,6 +16,7 @@ def _ensure_api_modules_loaded() -> None:
     from . import api_debug  # noqa: F401
     from . import api_lifecycle  # noqa: F401
     from . import api_memory  # noqa: F401
+    from . import api_modeling  # noqa: F401
     from . import api_modify  # noqa: F401
     from . import api_python  # noqa: F401
     from . import api_resources  # noqa: F401

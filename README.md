@@ -32,6 +32,7 @@ The project uses a modular architecture:
 * `api_core.py` - IDB metadata, function/string/global lists
 * `api_analysis.py` - Decompilation, disassembly, cross-references
 * `api_memory.py` - Memory reading operations
+* `api_modeling.py` - Database shaping (functions, code/data/string creation)
 * `api_types.py` - Type operations (prototypes, local types)
 * `api_modify.py` - Comments, renaming
 * `api_stack.py` - Stack frame operations
@@ -71,7 +72,7 @@ The project uses a modular architecture:
 
 * `decompile` – Batch decompile functions (Hex-Rays)
 * `disasm` – Batch disassemble functions
-* `linear_disassemble` – Linear disassembly from arbitrary address
+* `linear_disasm` – Linear disassembly from arbitrary address
 * `xrefs_to` – Batch cross-references to addresses
 * `xrefs_from` – Batch cross-references from addresses
 * `xrefs_to_field` – Heuristic struct field references
@@ -83,6 +84,16 @@ The project uses a modular architecture:
 * `get_bytes` – Read raw bytes
 * `get_u8` / `get_u16` / `get_u32` / `get_u64` – Read integers
 * `get_string` – Read null-terminated strings
+
+### Modeling Tools (`api_modeling.py`)
+
+* `create_function` – Create a function at an address
+* `delete_function` – Delete an existing function
+* `make_code` – Convert bytes at an address into code
+* `undefine_items` – Undefine a byte range
+* `make_data` – Create typed data items
+* `make_string` – Create a string literal
+* `create_array` – Create an array of typed data items
 
 ### Type Tools (`api_types.py`)
 
@@ -159,23 +170,25 @@ IDA-MCP/
     api_core.py           # Core API (metadata, lists)
     api_analysis.py       # Analysis API (decompile, disasm, xrefs)
     api_memory.py         # Memory API
+    api_modeling.py       # Modeling API (functions, code/data/string creation)
     api_types.py          # Type API
     api_modify.py         # Modification API
     api_stack.py          # Stack frame API
     api_debug.py          # Debugger API (unsafe)
     api_python.py         # Python execution API (unsafe)
-    api_lifecycle.py      # Lifecycle API (shutdown/exit)
+    api_lifecycle.py      # IDA-instance lifecycle API (shutdown/exit)
     api_resources.py      # MCP Resources
     registry.py           # Gateway client helpers / multi-instance registration
     proxy/                # stdio-based MCP proxy
       __init__.py         # Proxy module exports
       ida_mcp_proxy.py    # Main entry point (stdio MCP server)
-      api_lifecycle.py    # Proxy lifecycle API implementation
+      lifecycle.py        # Proxy-side lifecycle operations
       _http.py            # HTTP helpers for gateway communication
       _state.py           # State management and port validation
       register_tools.py   # Consolidated forwarding tool registration
       http_server.py      # HTTP transport wrapper (reuses ida_mcp_proxy.server)
   mcp.json                # MCP client configuration (both modes)
+  roadmap.md              # Phased plan for reducing py_eval dependence
   README.md               # README
   requirements.txt        # fastmcp dependencies
 ```
@@ -194,7 +207,7 @@ IDA-MCP/
 
 Closing an IDA instance only deregisters that instance. The standalone gateway keeps running and can accept later instances.
 
-`open_in_ida` is a proxy-side lifecycle tool. It launches the IDA binary resolved from `IDA_PATH` or `config.conf` (`ida_path`), sets `IDA_MCP_AUTO_START=1`, and injects `-A` unless you already passed it in `extra_args`. This reduces prompts, but it does not guarantee that every IDA/loader/plugin dialog is suppressed.
+`open_in_ida` is a proxy-side lifecycle tool. It launches the IDA binary resolved from `IDA_PATH` or `config.conf` (`ida_path`) and sets `IDA_MCP_AUTO_START=1` so the plugin comes up automatically. It keeps IDA in normal interactive GUI mode by default; if you want batch/autonomous startup, pass `-A` explicitly in `extra_args`.
 
 IDA-MCP is WSL-compatible. In a WSL environment, `open_in_ida` can launch a Windows IDA installation from Linux-side tooling, and it automatically converts the target file path into a Windows path before spawning IDA.
 
@@ -225,7 +238,8 @@ The bundled `mcp.json` and the current default config are centered on the HTTP p
 | Management | `check_connection`, `list_instances`, `select_instance` |
 | Lifecycle | `open_in_ida`, `close_ida` |
 | Core | `list_functions`, `get_metadata`, `list_strings`, `list_globals`, `list_local_types`, `get_entry_points`, `get_function`, `list_imports`, `list_exports`, `list_segments`, `get_cursor` |
-| Analysis | `decompile`, `disasm`, `linear_disassemble`, `xrefs_to`, `xrefs_from`, `xrefs_to_field`, `find_bytes`, `get_basic_blocks` |
+| Analysis | `decompile`, `disasm`, `linear_disasm`, `xrefs_to`, `xrefs_from`, `xrefs_to_field`, `find_bytes`, `get_basic_blocks` |
+| Modeling | `create_function`, `delete_function`, `make_code`, `undefine_items`, `make_data`, `make_string`, `create_array` |
 | Modify | `set_comment`, `rename_function`, `rename_global_variable`, `rename_local_variable`, `patch_bytes` |
 | Memory | `get_bytes`, `get_u8`, `get_u16`, `get_u32`, `get_u64`, `get_string` |
 | Types | `set_function_prototype`, `set_local_variable_type`, `set_global_variable_type`, `declare_type`, `list_structs`, `get_struct_info` |

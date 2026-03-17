@@ -8,7 +8,7 @@
 API 参数对应：
 - decompile: addr (逗号分隔的地址或名称字符串)
 - disasm: addr (逗号分隔的地址或名称字符串)
-- linear_disassemble: start_address, count
+- linear_disasm: start_address, count
 - xrefs_to: addr (逗号分隔的地址字符串)
 - find_bytes: pattern, start, end, limit
 - get_basic_blocks: addr
@@ -112,12 +112,12 @@ class TestDisasm:
         assert "error" in result[0]
 
 
-class TestLinearDisassemble:
+class TestLinearDisasm:
     """线性反汇编测试。"""
     
-    def test_linear_disassemble(self, tool_caller, first_function_address):
+    def test_linear_disasm(self, tool_caller, first_function_address):
         """测试线性反汇编。"""
-        result = tool_caller("linear_disassemble", {
+        result = tool_caller("linear_disasm", {
             "start_address": hex(first_function_address),
             "count": 10
         })
@@ -126,9 +126,9 @@ class TestLinearDisassemble:
             assert "instructions" in result
             assert len(result["instructions"]) <= 10
     
-    def test_linear_disassemble_more(self, tool_caller, first_function_address):
+    def test_linear_disasm_more(self, tool_caller, first_function_address):
         """测试较多指令的线性反汇编。"""
-        result = tool_caller("linear_disassemble", {
+        result = tool_caller("linear_disasm", {
             "start_address": hex(first_function_address),
             "count": 50
         })
@@ -140,17 +140,17 @@ class TestLinearDisassemble:
                 inst = result["instructions"][0]
                 assert "ea" in inst  # API 返回 ea
     
-    def test_linear_disassemble_invalid_count(self, tool_caller, first_function_address):
+    def test_linear_disasm_invalid_count(self, tool_caller, first_function_address):
         """测试无效计数。"""
-        result = tool_caller("linear_disassemble", {
+        result = tool_caller("linear_disasm", {
             "start_address": hex(first_function_address),
             "count": 0
         })
         assert "error" in result
     
-    def test_linear_disassemble_count_too_large(self, tool_caller, first_function_address):
+    def test_linear_disasm_count_too_large(self, tool_caller, first_function_address):
         """测试计数过大（max 64）。"""
-        result = tool_caller("linear_disassemble", {
+        result = tool_caller("linear_disasm", {
             "start_address": hex(first_function_address),
             "count": 100
         })

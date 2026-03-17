@@ -67,7 +67,6 @@ def get_bytes(
                 "size": len(byte_list),
                 "bytes": byte_list,
                 "hex": hex_str,
-                "error": None,
             })
         except Exception as e:
             results.append({"error": str(e), "query": query, "address": hex_addr(address)})
@@ -147,7 +146,6 @@ def _read_int(addr: Union[int, str], size: int, signed: bool = False) -> List[di
                 "address": hex_addr(address),
                 "value": value,
                 "hex": f"0x{value:0{size*2}X}",
-                "error": None,
             })
         except Exception as e:
             results.append({"error": str(e), "query": query, "address": hex_addr(address)})
@@ -207,10 +205,8 @@ def get_string(
                 "address": hex_addr(address),
                 "length": len(data),
                 "text": text,
-                "error": None,
             })
         except Exception as e:
             results.append({"error": str(e), "query": query, "address": hex_addr(address)})
     
     return results
-
