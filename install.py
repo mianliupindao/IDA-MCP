@@ -21,6 +21,9 @@ SOURCE_PLUGIN_DIR = REPO_ROOT / "ida_mcp"
 SOURCE_CONFIG = SOURCE_PLUGIN_DIR / "config.conf"
 REQUIREMENTS_FILE = REPO_ROOT / "requirements.txt"
 
+# 安装到 plugins 目录时使用的名称（避免与 ida-pro-mcp 的 ida_mcp 冲突）
+INSTALL_PLUGIN_NAME = "ida_mcp_cah"
+
 
 def detect_platform() -> str:
     if sys.platform.startswith("win"):
@@ -324,15 +327,39 @@ def backup_file(path: Path) -> Path:
     return backup_path
 
 
+def _rewrite_imports(*targets: Path) -> None:
+    """Replace all `ida_mcp` references with INSTALL_PLUGIN_NAME in installed .py files."""
+    import re
+
+    pattern = re.compile(r"\bida_mcp\b(?!_cah)")
+    replacement = INSTALL_PLUGIN_NAME
+
+    py_files: list[Path] = []
+    for target in targets:
+        if target.is_file() and target.suffix == ".py":
+            py_files.append(target)
+        elif target.is_dir():
+            py_files.extend(target.rglob("*.py"))
+
+    for py_file in py_files:
+        text = py_file.read_text(encoding="utf-8")
+        new_text = pattern.sub(replacement, text)
+        if new_text != text:
+            py_file.write_text(new_text, encoding="utf-8")
+
+
 def copy_plugin_tree(plugins_dir: Path) -> None:
     plugins_dir.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(SOURCE_PLUGIN_FILE, plugins_dir / SOURCE_PLUGIN_FILE.name)
+    dest_entry = plugins_dir / f"{INSTALL_PLUGIN_NAME}.py"
+    dest_pkg = plugins_dir / INSTALL_PLUGIN_NAME
+    shutil.copy2(SOURCE_PLUGIN_FILE, dest_entry)
     shutil.copytree(
         SOURCE_PLUGIN_DIR,
-        plugins_dir / SOURCE_PLUGIN_DIR.name,
+        dest_pkg,
         dirs_exist_ok=True,
         ignore=shutil.ignore_patterns("__pycache__", "*.pyc", "*.pyo", ".pytest_cache"),
     )
+    _rewrite_imports(dest_entry, dest_pkg)
 
 
 def quote_config_value(value: object) -> str:
@@ -480,7 +507,7 @@ def main() -> int:
 
     install_requirements(ida_python)
 
-    destination_config = plugins_dir / "ida_mcp" / "config.conf"
+    destination_config = plugins_dir / INSTALL_PLUGIN_NAME / "config.conf"
     if destination_config.exists():
         backup_path = backup_file(destination_config)
         print(f"Backed up existing config to: {backup_path}")
